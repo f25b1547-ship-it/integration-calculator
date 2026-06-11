@@ -310,4 +310,40 @@
             for (let px = 0; px <= canvas.width; px++) {
                 let xCoord = (px - originX) / scaleX;
                 try {
-                    let yCoord = compiledFormula(
+                    let yCoord = compiledFormula(xCoord);
+                    let py = originY - yCoord * scaleY;
+
+                    if (Number.isFinite(py)) {
+                        if (firstPoint) {
+                            ctx.moveTo(px, py);
+                            firstPoint = false;
+                        } else {
+                            ctx.lineTo(px, py);
+                        }
+                    }
+                } catch (e) {
+                    // skip broken plots safely (e.g division by 0)
+                }
+            }
+            ctx.stroke();
+
+            // 3. Highlight Vertical Boundaries lines (a and b bounds)
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 4]); // Dashed styling
+            ctx.strokeStyle = '#dc2626'; // Red bounds markers
+
+            // Line a
+            let lineAPx = originX + a * scaleX;
+            ctx.beginPath(); ctx.moveTo(lineAPx, 0); ctx.lineTo(lineAPx, canvas.height); ctx.stroke();
+
+            // Line b
+            let lineBPx = originX + b * scaleX;
+            ctx.beginPath(); ctx.moveTo(lineBPx, 0); ctx.lineTo(lineBPx, canvas.height); ctx.stroke();
+            ctx.setLineDash([]); // clear dash formatting
+        }
+
+        // Initialize setup
+        resizeCanvas();
+    </script>
+</body>
+</html>
