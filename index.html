@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Definite Integral Calculator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #f5f7fb;
+            display: flex;
+            height: 100vh;
+            color: #333;
+        }
+        /* Sidebar layout closely inspired by Desmos style templates */
+        #sidebar {
+            width: 360px;
+            background: #ffffff;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            z-index: 10;
+            overflow-y: auto;
+        }
+        h2 {
+            margin-top: 0;
+            font-size: 20px;
+            color: #1a1a1a;
+            border-bottom: 2px solid #edf2f7;
+            padding-bottom: 10px;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        label {
+            font-weight: 600;
+            font-size: 14px;
+            color: #4a5568;
+        }
+        input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 16px;
+            font-family: "Courier New", Courier, monospace;
+            background-color: #f8fafc;
+            transition: all 0.2s;
+        }
+        input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            background-color: #fff;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+        }
+        .range-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        input[type="range"] {
+            flex-grow: 1;
+            accent-color: #3b82f6;
+        }
+        #result-box {
+            background-color: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: auto;
+        }
+        .math-text {
+            font-size: 18px;
+            font-weight: bold;
+            color: #1e40af;
+            text-align: center;
+            margin: 5px 0 0 0;
+        }
+        #error-msg {
+            color: #dc2626;
+            font-size: 13px;
+            margin-top: 4px;
+            display: none;
+        }
+        /* Canvas workspace wrapper */
+        #canvas-container {
+            flex-grow: 1;
+            position: relative;
+            background: #fafafa;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .instructions {
+            font-size: 12px;
+            color: #718096;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <h2>Definite Integral</h2>
+        
+        <div class="input-group">
+            <label for="fx">Define Function f(x):</label>
+            <input type="text" id="fx" value="x^2 - 1" placeholder="e.g., x^2 - 1 or sin(x)">
+            <div id="error-msg">Invalid mathematical formula</div>
+        </div>
+
+        <div class="input-group">
+            <label>Lower Bound (a):</label>
+            <div class="range-container">
+                <input type="number" id="num-a" value="0" step="0.1" style="width: 80px;">
+                <input type="range" id="slide-a" min="-10" max="10" value="0" step="0.1">
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label>Upper Bound (b):</label>
+            <div class="range-container">
+                <input type="number" id="num-b" value="2" step="0.1" style="width: 80px;">
+                <input type="range" id="slide-b" min="-10" max="10" value="2" step="0.1">
+            </div>
+        </div>
+
+        <div class="instructions">
+            <strong>Supported math syntax:</strong><br>
+            Powers: <code>x^2</code>, Multiplication: <code>2*x</code>, Trig functions: <code>sin(x)</code>, <code>cos(x)</code>, Logs/Constants: <code>log(x)</code>, <code>pi</code>, <code>e</code>.
+        </div>
+
+        <div id="result-box">
+            <label style="color: #1e3a8a; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Calculated Output</label>
+            <p class="math-text" id="integral-display">∫<sub>a</sub><sup>b</sup> f(x) dx = 0.6667</p>
+        </div>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="graphCanvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('graphCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Inputs
+        const fxInput = document.getElementById('fx');
+        const numA = document.getElementById('num-a');
+        const slideA = document.getElementById('slide-a');
+        const numB = document.getElementById('num-b');
+        const slideB = document.getElementById('slide-b');
+        const errorMsg = document.getElementById('error-msg');
+        const integralDisplay = document.getElementById('integral-display');
+
+        // Global coordinate scale settings
+        const scaleX = 40; // Pixels per unit on X axis
+        const scaleY = 40; // Pixels per unit on Y axis
+        let originX, originY;
+
+        // Sync numeric inputs with sliders interchangeably
+        function syncInputs(numElement, slideElement) {
+            numElement.addEventListener('input', () => {
+                slideElement.value = numElement.value;
+                draw();
+            });
+            slideElement.addEventListener('input', () => {
+                numElement.value = slideElement.value;
+                draw();
+            });
+        }
+        syncInputs(numA, slideA);
+        syncInputs(numB, slideB);
+        fxInput.addEventListener('input', draw);
+
+        // Adjust resolution on browser resize
+        function resizeCanvas() {
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+            originX = canvas.width / 2;
+            originY = canvas.height / 2;
+            draw();
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        // Numerical Integration using Simpson's Rule
+        function computeIntegral(f, a, b) {
+            const n = 1000; // Intervals 
+            const h = (b - a) / n;
+            let sum = f(a) + f(b);
+
+            for (let i = 1; i < n; i++) {
+                let x = a + i * h;
+                sum += i % 2 === 0 ? 2 * f(x) : 4 * f(x);
+            }
+            return (h / 3) * sum;
+        }
+
+        // Draw routine loop
+        function draw() {
+            // Clear board
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            errorMsg.style.display = 'none';
+
+            const formulaText = fxInput.value;
+            let compiledFormula;
+
+            try {
+                // Parse expression string into functional scope safely via math.js
+                const node = math.parse(formulaText);
+                const code = node.compile();
+                compiledFormula = (xVal) => code.evaluate({ x: xVal });
+                // Check if evaluated successfully
+                compiledFormula(1);
+            } catch (err) {
+                errorMsg.style.display = 'block';
+                return;
+            }
+
+            const a = parseFloat(numA.value);
+            const b = parseFloat(numB.value);
+
+            // Draw Cartesian Grid Background Lines
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 1;
+
+            // Vertical Grid Lines
+            for (let x = Math.floor(-originX / scaleX); x <= Math.ceil(originX / scaleX); x++) {
+                let px = originX + x * scaleX;
+                ctx.beginPath();
+                ctx.moveTo(px, 0);
+                ctx.lineTo(px, canvas.height);
+                ctx.stroke();
+            }
+            // Horizontal Grid Lines
+            for (let y = Math.floor(-originY / scaleY); y <= Math.ceil(originY / scaleY); y++) {
+                let py = originY - y * scaleY;
+                ctx.beginPath();
+                ctx.moveTo(0, py);
+                ctx.lineTo(canvas.width, py);
+                ctx.stroke();
+            }
+
+            // Main X & Y Core Axis Lines
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 2;
+            // X-axis
+            ctx.beginPath(); ctx.moveTo(0, originY); ctx.lineTo(canvas.width, originY); ctx.stroke();
+            // Y-axis
+            ctx.beginPath(); ctx.moveTo(originX, 0); ctx.lineTo(originX, canvas.height); ctx.stroke();
+
+            // Calculate and display integration math text output
+            const integralVal = computeIntegral(compiledFormula, a, b);
+            if (!isNaN(integralVal)) {
+                integralDisplay.innerHTML = `&int;<sub>${a}</sub><sup>${b}</sup> f(x) dx = ${integralVal.toFixed(4)}`;
+            }
+
+            // 1. Render and fill Shaded Area bound under graph region
+            ctx.fillStyle = 'rgba(59, 130, 246, 0.25)'; // Semi-transparent blue fill
+            ctx.beginPath();
+            
+            let startedShading = false;
+            let stepSize = 1; // screen pixel iterations
+
+            for (let px = 0; px <= canvas.width; px++) {
+                let xCoord = (px - originX) / scaleX;
+                
+                // Keep points strict within user range boundaries [a, b]
+                if (xCoord >= Math.min(a, b) && xCoord <= Math.max(a, b)) {
+                    try {
+                        let yCoord = compiledFormula(xCoord);
+                        let py = originY - yCoord * scaleY;
+
+                        if (!startedShading) {
+                            // Anchor start of shape baseline on x axis
+                            let startPx = originX + Math.min(a, b) * scaleX;
+                            ctx.moveTo(startPx, originY);
+                            startedShading = true;
+                        }
+                        ctx.lineTo(px, py);
+                    } catch(e) {}
+                }
+            }
+            
+            if (startedShading) {
+                let endPx = originX + Math.max(a, b) * scaleX;
+                ctx.lineTo(endPx, originY);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            // 2. Plot the main Continuous Curve f(x) line layer
+            ctx.strokeStyle = '#2563eb'; // Solid Blue curve line
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+
+            let firstPoint = true;
+            for (let px = 0; px <= canvas.width; px++) {
+                let xCoord = (px - originX) / scaleX;
+                try {
+                    let yCoord = compiledFormula(
